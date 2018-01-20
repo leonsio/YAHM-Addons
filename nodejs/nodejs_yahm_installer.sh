@@ -4,17 +4,17 @@ description="NodeJS LXC Container"
 addon_required=""
 module_required=""
 
-addon_install()
+_addon_install()
 {
 
 }
 
-addon_update()
+_addon_update()
 {
 
 }
 
-addon_uninstall()
+_addon_uninstall()
 {
 
 }

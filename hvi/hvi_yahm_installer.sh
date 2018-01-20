@@ -4,17 +4,17 @@ description="Homematic-Virtual-Interface"
 addon_required="nodejs"
 module_required=""
 
-addon_install()
+_addon_install()
 {
 
 }
 
-addon_update()
+_addon_update()
 {
 
 }
 
-addon_uninstall()
+_addon_uninstall()
 {
 
 }
