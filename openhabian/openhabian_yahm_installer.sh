@@ -53,7 +53,8 @@ _addon_install()
     mkdir -p /var/log/yahm
     rm -rf /var/log/yahm/openhabian_install.log
 
-    info "\n$(timestamp) [GLOBAL] [openHABian] Starting the openHABian Host LXC installation.\n"
+    info "\n$(timestamp) [GLOBAL] [openHABian] Starting the openHABian Host LXC installation."
+    info "\n$(timestamp) [GLOBAL] [openHABian] For live installation log see: tail -f /var/log/yahm/openhabian_install.log\n"
 
     progress "$(timestamp) [HOST] [openHABian] Updating repositories..."
     until apt update &>> /var/log/yahm/openhabian_install.log; do sleep 1; done
@@ -64,7 +65,7 @@ _addon_install()
     /usr/bin/apt -y install debootstrap rsync &>> /var/log/yahm/openhabian_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
-    progress "$(timestamp) [HOST] [openHABian] Creating new LXC debian container: openhabian..."
+    progress "$(timestamp) [HOST] [openHABian] Creating new LXC debian container: openhabian. This can take some time..."
     lxc-create -n openhabian -t debian -- ${ARCH_ADD} --packages="wget gnupg git lsb-release ca-certificates iputils-ping" &>> /var/log/yahm/openhabian_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
@@ -142,7 +143,7 @@ _addon_install()
     progress  "$(timestamp) [LXC] [openHABian] Setup CCU2 Binding inside openHABian..."
     OH_CONF_DIR=/var/lib/lxc/openhabian/rootfs/etc/openhab2
     sed -i $OH_CONF_DIR/services/addons.cfg -e 's/^#binding.*$/binding=homematic/'
-    echo "Bridge homematic:bridge:yahm [ gatewayAddress='${YAHM_LXC_IP}' ]" > $OH_CONF_DIR/things/yahm-homematic.things
+    echo "Bridge homematic:bridge:yahm [ gatewayAddress=\"${YAHM_LXC_IP}\" ]" > $OH_CONF_DIR/things/yahm-homematic.things
     lxc-attach -n openhabian  -- chown openhab:openhab /etc/openhab2/things/yahm-homematic.things
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
@@ -174,6 +175,7 @@ EOF
 
     # Set executable
     chmod +x  /usr/sbin/openhabian*
+    chmod +x  /usr/sbin/yahm-openhabian
     info "OK"
 
     info "\n$(timestamp) [GLOBAL] [openHABian] Successfully installed\n"
