@@ -55,9 +55,9 @@ _addon_install()
 
     info "\n$(timestamp) [GLOBAL] [openHABian] Starting the openHABian Host LXC installation.\n"
 
-    progress "$(timestamp) [HOST] [openHABian] Updating repositories and upgrading installed packages..."
+    progress "$(timestamp) [HOST] [openHABian] Updating repositories..."
     until apt update &>> /var/log/yahm/openhabian_install.log; do sleep 1; done
-    apt --yes upgrade &>> /var/log/yahm/openhabian_install.log
+    #apt --yes upgrade &>> /var/log/yahm/openhabian_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [HOST] [openHABian] Installing dependencies..."
@@ -128,6 +128,10 @@ _addon_install()
         lxc-attach -n openhabian -- dpkg --add-architecture armhf
     fi
 
+    # hack für lxc und avahi, falls bereits eine Instanz läuft
+    lxc-attach -n openhabian -- sed -i /etc/adduser.conf -e 's/FIRST_SYSTEM_UID=100/FIRST_SYSTEM_UID=300/g'
+    lxc-attach -n openhabian -- sed -i /etc/adduser.conf -e 's/FIRST_SYSTEM_GID=100/FIRST_SYSTEM_GID=300/g'
+
     progress  "$(timestamp) [LXC] [openHABian] Starting openhabian installation, this can take some time....."
     lxc-attach -n openhabian -- /opt/openhabian/openhabian-setup.sh unattended
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
@@ -156,27 +160,25 @@ lxc-attach -n openhabian -- /opt/openhabian/openhabian-setup.sh
 
 EOF
     # join script
-    cat > /usr/sbin/openhabian <<EOF
+    cat > /usr/sbin/yahm-openhabian <<EOF
 #!/bin/bash
 
-lxc-attach -n openhabian
+if [ $# -eq 0 ]
+then
+    lxc-attach -n openhabian
+else
+    lxc-attach -n openhabian -- \$@
+fi
 
 EOF
-    # exec script
-    cat > /usr/sbin/openhabian-exec <<EOF
-#!/bin/bash
 
-lxc-attach -n openhabian -- \$@
-
-EOF
     # Set executable
     chmod +x  /usr/sbin/openhabian*
     info "OK"
 
     info "\n$(timestamp) [GLOBAL] [openHABian] Successfully installed\n"
     info "$(timestamp) [GLOBAL] [openHABian] Run openhabian-config to access openhabian configuration"
-    info "$(timestamp) [GLOBAL] [openHABian] Run openhabian-exec COMMAND to execute command inside openhabian"
-    info "$(timestamp) [GLOBAL] [openHABian] Run openhabian to login on openhabian"
+    info "$(timestamp) [GLOBAL] [openHABian] Run yahm-openhabian to execute command or login"
     info "$(timestamp) [GLOBAL] OpenHABian Login URL: http://${OH_LXC_IP}:8080"
 
 }
@@ -214,7 +216,11 @@ _addon_uninstall()
     lxc-destroy -n openhabian
     if [ $? -eq 0 ]; then info "OK"; else info "FAILED"; fail_inprogress; fi
 
-    progress "$(timestamp) [HOST] [openHABian] remove admin scripts"
-    rm -rf /usr/sbin/openhabian*
+    progress "$(timestamp) [HOST] [openHABian] Removing admin scripts"
+    rm -rf /usr/sbin/openhabian-config
+    rm -rf /usr/sbin/yahm-openhabian
     info "OK"
+
+    # cleanup
+    rm -rf /var/lib/lxc/openhabian
 }
