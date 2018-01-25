@@ -40,10 +40,10 @@ _addon_install()
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [HOST] [node.js] Installing dependencies..."
-    /usr/bin/apt -y install debootstrap rsync &>> /var/log/yahm/nodejs_install.log
+    /usr/bin/apt -y install rsync &>> /var/log/yahm/nodejs_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
-    progress "$(timestamp) [HOST] [node.js] Creating new LXC debian container: nodejs. This can take some time..."
+    progress "$(timestamp) [HOST] [node.js] Creating new LXC container: nodejs. This can take some time..."
     lxc-create -n nodejs -t download --  --dist ubuntu --release xenial --arch=arm64 &>> /var/log/yahm/nodejs_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
@@ -97,7 +97,7 @@ fi
 EOF
 
     # Set executable
-    chmod +x  /usr/sbin/nodejs*
+    chmod +x  /usr/sbin/yahm-nodejs*
     info "OK"
     
     info "\n$(timestamp) [GLOBAL] [node.js] Successfully installed\n"

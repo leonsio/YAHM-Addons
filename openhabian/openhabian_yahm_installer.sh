@@ -66,7 +66,7 @@ _addon_install()
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [HOST] [openHABian] Creating new LXC debian container: openhabian. This can take some time..."
-    lxc-create -n openhabian -t debian -- ${ARCH_ADD} --packages="wget gnupg git lsb-release ca-certificates iputils-ping" &>> /var/log/yahm/openhabian_install.log
+    lxc-create -n openhabian -t debian -- ${ARCH_ADD} --packages="wget gnupg git lsb-release ca-certificates iputils-ping inetutils-syslogd" &>> /var/log/yahm/openhabian_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [HOST] [openHABian] Creating LXC network configuration..."
