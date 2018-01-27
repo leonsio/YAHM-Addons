@@ -4,25 +4,16 @@ description="NodeJS LXC Container"
 addon_required=""
 module_required=""
 
-timestamp() { date +"%F_%T_%Z"; }
-
 fail_inprogress()
 {
   cat /var/log/yahm/nodejs_install.log
-  die "\n$(timestamp) [HOST] [nodejs] Initial setup exiting with an error!\n\n"
+  die "\n$(timestamp) [HOST] [node.js] Initial setup exiting with an error!\n\n"
 }
 
 _addon_install()
 {
 
-    if [ `dpkg --print-architecture` = "arm64" ]
-    then
-        ARCH_ADD="--arch arm64"
-        ARCH="arm64"
-    else
-        ARCH_ADD=""
-        ARCH="armhf"
-    fi
+    local ARCH=`dpkg --print-architecture`
 
     if [ -d /var/lib/lxc/nodejs ]
     then
@@ -39,12 +30,8 @@ _addon_install()
     #apt --yes upgrade &>> /var/log/yahm/nodejs_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
-    progress "$(timestamp) [HOST] [node.js] Installing dependencies..."
-    /usr/bin/apt -y install rsync &>> /var/log/yahm/nodejs_install.log
-    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
     progress "$(timestamp) [HOST] [node.js] Creating new LXC container: nodejs. This can take some time..."
-    lxc-create -n nodejs -t download --  --dist ubuntu --release xenial --arch=arm64 &>> /var/log/yahm/nodejs_install.log
+    lxc-create -n nodejs -t download --  --dist ubuntu --release xenial --arch=${ARCH} &>> /var/log/yahm/nodejs_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [HOST] [node.js] Creating LXC network configuration..."
@@ -63,6 +50,11 @@ _addon_install()
     # wait to get ethernet connection up
     sleep 5
 
+    progress "$(timestamp) [HOST] [node.js] Linking syslog to /var/log/nodejs..."
+    mkdir -p /var/log/nodejs
+    mount --bind /var/lib/lxc/nodejs/rootfs/var/log /var/log/nodejs/
+    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
+
     info "\n$(timestamp) [GLOBAL] [nodejs] Host Installation done, beginning with LXC preparation.\n"
 
     progress "$(timestamp) [LXC] [node.js] Installing dependencies..."
@@ -73,7 +65,7 @@ _addon_install()
     lxc-attach -n nodejs -- sed -i /etc/adduser.conf -e 's/FIRST_SYSTEM_UID=100/FIRST_SYSTEM_UID=200/g'
     lxc-attach -n nodejs -- sed -i /etc/adduser.conf -e 's/FIRST_SYSTEM_GID=100/FIRST_SYSTEM_GID=200/g'
 
-    progress "$(timestamp) [LXC] [node.js] Installing node.js repository"
+    progress "$(timestamp) [LXC] [node.js] Setup node.js repository"
     curl -sL https://deb.nodesource.com/setup_9.x | lxc-attach -n nodejs -- bash -  &>> /var/lib/lxc/nodejs/config
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
@@ -81,7 +73,7 @@ _addon_install()
     lxc-attach -n nodejs -- /usr/bin/apt -y install nodejs &>> /var/log/yahm/nodejs_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
-    progress "$(timestamp) [HOST] [nodejs] Creating some useful scripts..."
+    progress "$(timestamp) [HOST] [node.js] Creating some useful scripts..."
 
     # join script
     cat > /usr/sbin/yahm-nodejs <<EOF
@@ -91,15 +83,27 @@ if [ $# -eq 0 ]
 then
     lxc-attach -n nodejs
 else
-
-fi
     lxc-attach -n nodejs -- \$@
+fi
+
 EOF
 
     # Set executable
     chmod +x  /usr/sbin/yahm-nodejs*
     info "OK"
-    
+
+    # Geting some IP informations
+    NJ_LXC_IP=$(get_lxc_ip "nodejs")
+    LXC_HOST_IP=$(get_ip_to_route ${NJ_LXC_IP})
+
+#    progress "$(timestamp) [LXC] [node.js] Setup remote syslog..."
+#    echo "*.*  @@${LXC_HOST_IP}" | lxc-attach -n nodejs -- tee /etc/rsyslog.d/10-yahm.conf &>> /var/log/yahm/nodejs_install.log
+#    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
+#
+#    progress "$(timestamp) [LXC] [node.js] Restarting syslog..."
+#    lxc-attach -n nodejs -- service rsyslog restart &>> /var/log/yahm/nodejs_install.log
+#    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
+
     info "\n$(timestamp) [GLOBAL] [node.js] Successfully installed\n"
     info "$(timestamp) [GLOBAL] [node.js] Run yahm-nodejs to execute command or login"
 
@@ -130,6 +134,10 @@ _addon_uninstall()
     lxc-stop -n nodejs -k
     if [ $? -eq 0 ]; then info "OK"; else info "FAILED"; fail_inprogress; fi
 
+    # cleanup 1
+    umount /var/log/nodejs
+    rm -rf /var/log/nodejs
+
     progress "$(timestamp) [HOST] [node.js] Removing node.js container..."
     lxc-destroy -n nodejs
     if [ $? -eq 0 ]; then info "OK"; else info "FAILED"; fail_inprogress; fi
@@ -138,6 +146,6 @@ _addon_uninstall()
     rm -rf /usr/sbin/yahm-nodejs
     info "OK"
 
-    #cleanup
+    # cleanup 2
     rm -rf /var/lib/lxc/nodejs
 }

@@ -37,13 +37,13 @@ _addon_install()
     # create own user
     if [ $(lxc-attach -n nodejs -- cat /etc/passwd | grep hmvi |wc -l) -eq 0 ];
     then
-        info "Creating new hmvi user..."
+        progress "Creating new hmvi user..."
         lxc-attach -n nodejs -- useradd -m hmvi
         if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fi
     fi
 
-    progress "Installing homematic-virtual-interface..."
-    lxc-attach -n nodejs --  npm install -g homematic-virtual-interface
+    progress "Installing homematic-virtual-interface (can take some time)..."
+    lxc-attach -n nodejs --  npm install -g homematic-virtual-interface &>> /var/log/yahm/hvi_install.log
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fi
 
     progress "Writing CCU2 IP..."
@@ -63,10 +63,10 @@ _addon_install()
 
     lxc-attach -n nodejs -- systemctl daemon-reload
     progress "Enable hmvi Service..."
-    lxc-attach -n nodejs -- systemctl enable hmvi.service
+    lxc-attach -n nodejs -- systemctl enable hmvi.service &>> /var/log/yahm/hvi_install.log
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fi
     progress "Starting hmvi Service..."
-    lxc-attach -n nodejs -- systemctl start hmvi.service
+    lxc-attach -n nodejs -- systemctl start hmvi.service &>> /var/log/yahm/hvi_install.log
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fi
 
     if [ $YAHM_RUNNING -eq 1 ]
@@ -111,7 +111,7 @@ _addon_uninstall()
     lxc-attach -n nodejs -- systemctl stop hmvi.service
 
     progress "Uninstalling homematic-virtual-interface..."
-    lxc-attach -n nodejs --  npm uninstall -g homematic-virtual-interface
+    lxc-attach -n nodejs --  npm uninstall -g homematic-virtual-interface &>> /var/log/yahm/nvi_uninstall.log
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fi
 
     progress "Removing hmvi user"

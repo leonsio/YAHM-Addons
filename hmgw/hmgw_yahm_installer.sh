@@ -20,6 +20,7 @@ fi
 _addon_install()
 {
 
+    die "Not tested"
     if [ -e ${LXC_ROOT_MODULES}/hm-mod-rpi-pcb ] && [ $IS_FORCE -ne 1 ]
     then
         die "ERROR: hm-mod-rpi-pcb module is installed, please remove it first"
@@ -170,6 +171,8 @@ _addon_update()
 
 _addon_uninstall()
 {
+    die "not tested"
+
     info "Uninstall gpio reset service..."
     if [ -e $file_hm_fake_lan_gw ];then
 

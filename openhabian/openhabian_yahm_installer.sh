@@ -4,30 +4,20 @@ description="OpenHABian LXC Container"
 addon_required=""
 module_required=""
 
-timestamp() { date +"%F_%T_%Z"; }
-
 fail_inprogress()
 {
   cat /var/log/yahm/openhabian_install.log
   die "\n$(timestamp) [HOST] [openHABian] Initial setup exiting with an error!\n\n"
 }
 
-
 _addon_install()
 {
 
-    if [ `dpkg --print-architecture` = "arm64" ]
-    then
-        ARCH_ADD="--arch arm64"
-        ARCH="arm64"
-    else
-        ARCH_ADD=""
-        ARCH="armhf"
-    fi
+    local ARCH=`dpkg --print-architecture`
 
     if [ $(lxc-info -n ${LXCNAME} | grep RUNNING | wc -l) -eq 1 ]
     then
-        YAHM_LXC_IP=$(lxc-info -i -n ${LXCNAME} | awk '{print $2}')
+        YAHM_LXC_IP=$(get_lxc_ip ${LXCNAME})
         if [ ${#YAHM_LXC_IP} -eq 0 ]
         then
             error "$(timestamp) [GLOBAL] [openHABian] ERROR: ${LXCNAME} container has no assigned ips, please enter manually"
@@ -61,12 +51,8 @@ _addon_install()
     #apt --yes upgrade &>> /var/log/yahm/openhabian_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
-    progress "$(timestamp) [HOST] [openHABian] Installing dependencies..."
-    /usr/bin/apt -y install debootstrap rsync &>> /var/log/yahm/openhabian_install.log
-    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
-    progress "$(timestamp) [HOST] [openHABian] Creating new LXC debian container: openhabian. This can take some time..."
-    lxc-create -n openhabian -t debian -- ${ARCH_ADD} --packages="wget gnupg git lsb-release ca-certificates iputils-ping inetutils-syslogd" &>> /var/log/yahm/openhabian_install.log
+    progress "$(timestamp) [HOST] [openHABian] Creating new LXC container: openhabian. This can take some time..."
+    lxc-create -n openhabian -t download --  --dist debian --release stretch --arch=${ARCH} &>> /var/log/yahm/nodejs_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [HOST] [openHABian] Creating LXC network configuration..."
@@ -82,7 +68,16 @@ _addon_install()
     lxc-start -n openhabian -d
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
+    progress "$(timestamp) [HOST] [openHABian] Linking syslog to /var/log/openhabian..."
+    mkdir -p /var/log/openhabian
+    mount --bind /var/lib/lxc/openhabian/rootfs/var/log /var/log/openhabian/
+    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
+
     info "\n$(timestamp) [GLOBAL] [openHABian] Host Installation done, beginning with LXC preparation.\n"
+
+    # hack für lxc und avahi, falls bereits eine Instanz läuft
+    lxc-attach -n openhabian -- sed -i /etc/adduser.conf -e 's/FIRST_SYSTEM_UID=100/FIRST_SYSTEM_UID=300/g'
+    lxc-attach -n openhabian -- sed -i /etc/adduser.conf -e 's/FIRST_SYSTEM_GID=100/FIRST_SYSTEM_GID=300/g'
 
     if [ "$BOARD_TYPE" = "Raspberry Pi" ]
     then
@@ -112,6 +107,11 @@ _addon_install()
     # wait to get ethernet connection up
     sleep 5
 
+    progress "$(timestamp) [LXC] [openHABian] Installing dependencies..."
+    lxc-attach -n openhabian --  apt -y install wget gnupg git lsb-release ca-certificates iputils-ping rsyslog &>> /var/log/yahm/openhabian_install.log
+    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
+
+
     progress "$(timestamp) [LXC] [openHABian] Cloning openhabian repository..."
     lxc-attach -n openhabian -- git clone -b master https://github.com/openhab/openhabian.git /opt/openhabian &>> /var/log/yahm/openhabian_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
@@ -129,16 +129,21 @@ _addon_install()
         lxc-attach -n openhabian -- dpkg --add-architecture armhf
     fi
 
-    # hack für lxc und avahi, falls bereits eine Instanz läuft
-    lxc-attach -n openhabian -- sed -i /etc/adduser.conf -e 's/FIRST_SYSTEM_UID=100/FIRST_SYSTEM_UID=300/g'
-    lxc-attach -n openhabian -- sed -i /etc/adduser.conf -e 's/FIRST_SYSTEM_GID=100/FIRST_SYSTEM_GID=300/g'
+    # Geting some IP informations
+    OH_LXC_IP=$(get_lxc_ip "openhabian")
+    LXC_HOST_IP=$(get_ip_to_route ${OH_LXC_IP})
+
+#    progress "$(timestamp) [LXC] [ioBroker] Setup remote syslog..."
+#    echo "*.*  @@${LXC_HOST_IP}" | lxc-attach -n openhabian -- tee /etc/rsyslog.d/10-yahm.conf &>> /var/log/yahm/iobroker_install.log
+#    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
+#
+#    progress "$(timestamp) [LXC] [ioBroker] Restarting syslog..."
+#    lxc-attach -n openhabian -- service rsyslog restart &>> /var/log/yahm/iobroker_install.log
+#    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
 
     progress  "$(timestamp) [LXC] [openHABian] Starting openhabian installation, this can take some time....."
     lxc-attach -n openhabian -- /opt/openhabian/openhabian-setup.sh unattended
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
-    # Geting some IP informations
-    OH_LXC_IP=$(lxc-info -i -n openhabian | awk '{print $2}')
 
     progress  "$(timestamp) [LXC] [openHABian] Setup CCU2 Binding inside openHABian..."
     OH_CONF_DIR=/var/lib/lxc/openhabian/rootfs/etc/openhab2
@@ -185,7 +190,6 @@ EOF
 
 }
 
-
 _addon_update()
 {
 
@@ -214,6 +218,10 @@ _addon_uninstall()
     lxc-stop -n openhabian -k
     if [ $? -eq 0 ]; then info "OK"; else info "FAILED"; fail_inprogress; fi
 
+    # cleanup 1
+    umount /var/log/openhabian
+    rm -rf /var/log/openhabian
+
     progress "$(timestamp) [HOST] [openHABian] Removing openHABian container..."
     lxc-destroy -n openhabian
     if [ $? -eq 0 ]; then info "OK"; else info "FAILED"; fail_inprogress; fi
@@ -223,6 +231,6 @@ _addon_uninstall()
     rm -rf /usr/sbin/yahm-openhabian
     info "OK"
 
-    # cleanup
+    # cleanup 2
     rm -rf /var/lib/lxc/openhabian
 }

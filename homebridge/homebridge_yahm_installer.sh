@@ -42,7 +42,7 @@ _addon_install()
     # create own user
     if [ $(lxc-attach -n nodejs -- cat /etc/passwd | grep homebridge |wc -l) -eq 0 ];
     then
-        info "Creating new homebridge user..."
+        progress "Creating new homebridge user..."
         lxc-attach -n nodejs -- useradd -m homebridge
         if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fi
     fi
@@ -68,7 +68,7 @@ _addon_install()
 	"platforms": [{
 		"platform": "HomeMatic",
 		"name": "HomeMatic CCU",
-		"ccu_ip": "\$YAHM_LXC_IP",
+		"ccu_ip": "$YAHM_LXC_IP",
 		"subsection": "",
 		"filter_device": [],
 		"filter_channel": [],
