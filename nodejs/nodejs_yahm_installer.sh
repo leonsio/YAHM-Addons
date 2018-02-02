@@ -1,64 +1,13 @@
 #!/bin/bash
 
-description="NodeJS LXC Container"
-addon_required=""
-module_required=""
 
-fail_inprogress()
+_nodejs_install()
 {
-  cat /var/log/yahm/nodejs_install.log
-  die "\n$(timestamp) [HOST] [node.js] Initial setup exiting with an error!\n\n"
-}
-
-_addon_install()
-{
-
-    local ARCH=`dpkg --print-architecture`
-
-    if [ -d /var/lib/lxc/nodejs ]
-    then
-        die "$(timestamp) [node.js] FATAL: node.js LXC Instance found, please delete it first /var/lib/lxc/nodejs"
-    fi
-
-    mkdir -p /var/log/yahm
-    rm -rf /var/log/yahm/nodejs_install.log
-
-    info "\n$(timestamp) [GLOBAL] [node.js] Starting the nodejs Host LXC installation.\n"
-
-    progress "$(timestamp) [HOST] [node.js] Updating repositories..."
-    until apt update &>> /var/log/yahm/nodejs_install.log; do sleep 1; done
-    #apt --yes upgrade &>> /var/log/yahm/nodejs_install.log
-    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
-    progress "$(timestamp) [HOST] [node.js] Creating new LXC container: nodejs. This can take some time..."
-    lxc-create -n nodejs -t download --  --dist ubuntu --release xenial --arch=${ARCH} &>> /var/log/yahm/nodejs_install.log
-    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
-    progress "$(timestamp) [HOST] [node.js] Creating LXC network configuration..."
-    ${YAHM_DIR}/bin/yahm-network -n nodejs -f attach_bridge &>> /var/log/yahm/nodejs_install.log
-    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
-    # attach network configuration
-    echo lxc.include=/var/lib/lxc/nodejs/config.network >> /var/lib/lxc/nodejs/config
-    # setup autostart
-    echo 'lxc.start.auto = 1' >> /var/lib/lxc/nodejs/config
-
-    progress "$(timestamp) [HOST] [node.js] Starting nodejs LXC container..."
-    lxc-start -n nodejs -d
-    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
-    # wait to get ethernet connection up
-    sleep 5
-
-    progress "$(timestamp) [HOST] [node.js] Linking syslog to /var/log/nodejs..."
-    mkdir -p /var/log/nodejs
-    mount --bind /var/lib/lxc/nodejs/rootfs/var/log /var/log/nodejs/
-    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
-
-    info "\n$(timestamp) [GLOBAL] [nodejs] Host Installation done, beginning with LXC preparation.\n"
+    info "\n$(timestamp) [LXC] [node.js] Starting LXC installation.\n"
 
     progress "$(timestamp) [LXC] [node.js] Installing dependencies..."
-    lxc-attach -n nodejs -- /usr/bin/apt -y install wget git curl &>> /var/log/yahm/nodejs_install.log
+    lxc-attach -n nodejs -- /usr/bin/apt-get update &>> ${LOG_FILE}
+    lxc-attach -n nodejs -- /usr/bin/apt-get -y install wget git curl &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     # hack für lxc und avahi, falls bereits eine Instanz läuft
@@ -66,11 +15,11 @@ _addon_install()
     lxc-attach -n nodejs -- sed -i /etc/adduser.conf -e 's/FIRST_SYSTEM_GID=100/FIRST_SYSTEM_GID=200/g'
 
     progress "$(timestamp) [LXC] [node.js] Setup node.js repository"
-    curl -sL https://deb.nodesource.com/setup_9.x | lxc-attach -n nodejs -- bash -  &>> /var/lib/lxc/nodejs/config
+    curl -sL https://deb.nodesource.com/setup_9.x | lxc-attach -n nodejs -- bash -  &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [LXC] [node.js] Installing node.js"
-    lxc-attach -n nodejs -- /usr/bin/apt -y install nodejs &>> /var/log/yahm/nodejs_install.log
+    lxc-attach -n nodejs -- /usr/bin/apt -y install nodejs &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [HOST] [node.js] Creating some useful scripts..."
@@ -97,11 +46,11 @@ EOF
     LXC_HOST_IP=$(get_ip_to_route ${NJ_LXC_IP})
 
 #    progress "$(timestamp) [LXC] [node.js] Setup remote syslog..."
-#    echo "*.*  @@${LXC_HOST_IP}" | lxc-attach -n nodejs -- tee /etc/rsyslog.d/10-yahm.conf &>> /var/log/yahm/nodejs_install.log
+#    echo "*.*  @@${LXC_HOST_IP}" | lxc-attach -n nodejs -- tee /etc/rsyslog.d/10-yahm.conf &>> ${LOG_FILE}
 #    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
 #
 #    progress "$(timestamp) [LXC] [node.js] Restarting syslog..."
-#    lxc-attach -n nodejs -- service rsyslog restart &>> /var/log/yahm/nodejs_install.log
+#    lxc-attach -n nodejs -- service rsyslog restart &>> ${LOG_FILE}
 #    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
 
     info "\n$(timestamp) [GLOBAL] [node.js] Successfully installed\n"
@@ -109,7 +58,7 @@ EOF
 
 }
 
-_addon_update()
+_nodejs_update()
 {
    if [ $(lxc-info -n nodejs | grep STOPPED|wc -l) -eq 1 ]
     then
@@ -117,14 +66,14 @@ _addon_update()
     fi
 
     progress "$(timestamp) [LXC] [node.js] Updating repositories and upgrading installed packages..."
-    until lxc-attach -n nodejs -- apt update &>> /var/log/yahm/nodejs_install.log; do sleep 1; done
-    lxc-attach -n nodejs -- apt --yes upgrade &>> /var/log/yahm/nodejs_install.log
+    until lxc-attach -n nodejs -- apt update &>> ${LOG_FILE}; do sleep 1; done
+    lxc-attach -n nodejs -- apt --yes upgrade &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else info "FAILED"; fail_inprogress; fi
 
     info "$(timestamp) [LXC] [node.js] node.js was upgraded successfully\n"
 }
 
-_addon_uninstall()
+_nodejs_uninstall()
 {
     info "Deleting installed node.js container. To cancel this operation type CTRL+C you have 5 seconds..."
     countdown

@@ -1,14 +1,10 @@
 #!/bin/bash
 
-description="Homebridge: Apple HomeKit (Siri) Binding"
-addon_required="nodejs"
-module_required=""
-
-
-_addon_install()
+_homebridge_install()
 {
 
     NODEJS_ROOT_FS="/var/lib/lxc/nodejs/rootfs"
+
 
     if [ $(lxc-info -n nodejs | grep RUNNING | wc -l) -eq 0 ]
     then
@@ -19,7 +15,7 @@ _addon_install()
     then
         YAHM_RUNNING=1
         YAHM_LXC_IP=$(lxc-info -i -n ${LXCNAME} | awk '{print $2}')
-        if [ ${#YAHM_LXC_IP} -eq 0 ]
+        if [ ${YAHM_LXC_IP} -eq 0 ]
         then
             error "ERROR: ${LXCNAME} container has no assigned ips, please enter manually"
             YAHM_LXC_IP=$(whiptail --inputbox "Please enter your CCU2 IP" 20 60 "000.000.000.000" 3>&1 1>&2 2>&3)
@@ -30,7 +26,7 @@ _addon_install()
         YAHM_LXC_IP=$(whiptail --inputbox "Please enter your CCU2 IP" 20 60 "000.000.000.000" 3>&1 1>&2 2>&3)
     fi
 
-    if [ ${#YAHM_LXC_IP} -eq 0 ]
+    if [ ${YAHM_LXC_IP} -eq 0 ]
     then
         die "FATAL: CCU2 IP can not be empty"
     fi
@@ -111,7 +107,7 @@ EOF
 
 }
 
-_addon_update()
+_homebridge_update()
 {
 
     if [ $(lxc-info -n nodejs | grep RUNNING | wc -l) -eq 0 ]
@@ -128,7 +124,7 @@ _addon_update()
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fi
 }
 
-_addon_uninstall()
+_homebridge_uninstall()
 {
 
     if [ $(lxc-info -n nodejs | grep RUNNING | wc -l) -eq 0 ]
@@ -148,7 +144,7 @@ _addon_uninstall()
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fi
 
     progress "Removing homebridge user"
-    lxc-attach -n nodejs -- userdel -r -f homebridge &>> /var/log/yahm/homebridge_install.log
+    lxc-attach -n nodejs -- userdel -r -f homebridge &>> /var/log/yahm/homebridge_uninstall.log
     info "OK"
 
 }

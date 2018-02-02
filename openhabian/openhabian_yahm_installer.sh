@@ -18,7 +18,7 @@ _addon_install()
     if [ $(lxc-info -n ${LXCNAME} | grep RUNNING | wc -l) -eq 1 ]
     then
         YAHM_LXC_IP=$(get_lxc_ip ${LXCNAME})
-        if [ ${#YAHM_LXC_IP} -eq 0 ]
+        if [ ${YAHM_LXC_IP} -eq 0 ]
         then
             error "$(timestamp) [GLOBAL] [openHABian] ERROR: ${LXCNAME} container has no assigned ips, please enter manually"
             YAHM_LXC_IP=$(whiptail --inputbox "Please enter your CCU2 IP" 20 60 "000.000.000.000" 3>&1 1>&2 2>&3)
@@ -30,7 +30,7 @@ _addon_install()
         #read -p "CCU2 IP: " YAHM_LXC_IP
     fi
 
-    if [ ${#YAHM_LXC_IP} -eq 0 ]
+    if [ ${YAHM_LXC_IP} -eq 0 ]
     then
         die "$(timestamp) [openHABian] FATAL: CCU2 IP can not be empty"
     fi
@@ -52,11 +52,11 @@ _addon_install()
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [HOST] [openHABian] Creating new LXC container: openhabian. This can take some time..."
-    lxc-create -n openhabian -t download --  --dist debian --release stretch --arch=${ARCH} &>> /var/log/yahm/nodejs_install.log
+    lxc-create ${VERBOSE} -n openhabian -t download --  --dist debian --release stretch --arch=${ARCH}
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [HOST] [openHABian] Creating LXC network configuration..."
-    ${YAHM_DIR}/bin/yahm-network -n openhabian -f attach_bridge &>> /var/log/yahm/openhabian_install.log
+    ${YAHM_DIR}/bin/yahm-network ${VERBOSE} -n openhabian -f attach_bridge &>> /var/log/yahm/openhabian_install.log
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     # attach network configuration

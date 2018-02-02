@@ -1,88 +1,33 @@
 #!/bin/bash
 
-description="ioBroker LXC Container"
-addon_required=""
-module_required=""
-
-
-fail_inprogress()
+_iobroker_install()
 {
-  cat /var/log/yahm/iobroker_install.log
-  die "\n$(timestamp) [HOST] [ioBroker] Initial setup exiting with an error!\n\n"
-}
-
-_addon_install()
-{
-    local ARCH=`dpkg --print-architecture`
-
-    if [ -d /var/lib/lxc/iobroker ]
-    then
-        die "$(timestamp) [ioBroker] FATAL: ioBroker LXC Instance found, please delete it first /var/lib/lxc/iobroker"
-    fi
 
     if [ $(lxc-info -n ${LXCNAME} | grep RUNNING | wc -l) -eq 1 ]
     then
         YAHM_LXC_IP=$(get_lxc_ip ${LXCNAME})
-        if [ ${#YAHM_LXC_IP} -eq 0 ]
+        if [ ${YAHM_LXC_IP} -eq 0 ]
         then
-            error "$(timestamp) [GLOBAL] [openHABian] ERROR: ${LXCNAME} container has no assigned ips, please enter manually"
+            error "$(timestamp) [GLOBAL] [ioBroker] ERROR: ${LXCNAME} container has no assigned ips, please enter manually"
             YAHM_LXC_IP=$(whiptail --inputbox "Please enter your CCU2 IP" 20 60 "000.000.000.000" 3>&1 1>&2 2>&3)
             # read -p "CCU2 IP: " YAHM_LXC_IP
         fi
     else
-        error "$(timestamp) [GLOBAL] [openHABian] ERROR: ${LXCNAME} container is not running or present, please enter CCU2 IP manually"
+        error "$(timestamp) [GLOBAL] [ioBroker] ERROR: ${LXCNAME} container is not running or present, please enter CCU2 IP manually"
         YAHM_LXC_IP=$(whiptail --inputbox "Please enter your CCU2 IP" 20 60 "000.000.000.000" 3>&1 1>&2 2>&3)
         #read -p "CCU2 IP: " YAHM_LXC_IP
     fi
 
-    if [ ${#YAHM_LXC_IP} -eq 0 ]
+    if [ ${YAHM_LXC_IP} -eq 0 ]
     then
-        die "$(timestamp) [openHABian] FATAL: CCU2 IP can not be empty"
+        die "$(timestamp) [ioBroker] FATAL: CCU2 IP can not be empty"
     fi
 
-    mkdir -p /var/log/yahm
-    rm -rf /var/log/yahm/iobroker_install.log
 
-    info "\n$(timestamp) [GLOBAL] [ioBroker] Starting the iobroker Host LXC installation.\n"
-
-    progress "$(timestamp) [HOST] [ioBroker] Updating repositories..."
-    until apt update &>> /var/log/yahm/iobroker_install.log; do sleep 1; done
-    #apt --yes upgrade &>> /var/log/yahm/iobroker_install.log
-    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
-    progress "$(timestamp) [HOST] [ioBroker] Installing dependencies..."
-    /usr/bin/apt -y install rsync &>> /var/log/yahm/iobroker_install.log
-    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
-    progress "$(timestamp) [HOST] [ioBroker] Creating new LXC container: iobroker. This can take some time..."
-    lxc-create -n iobroker -t download --  --dist ubuntu --release xenial --arch=${ARCH} &>> /var/log/yahm/iobroker_install.log
-    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
-    progress "$(timestamp) [HOST] [ioBroker] Creating LXC network configuration..."
-    ${YAHM_DIR}/bin/yahm-network -n iobroker -f attach_bridge &>> /var/log/yahm/iobroker_install.log
-    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
-    # attach network configuration
-    echo lxc.include=/var/lib/lxc/iobroker/config.network >> /var/lib/lxc/iobroker/config
-    # setup autostart
-    echo 'lxc.start.auto = 1' >> /var/lib/lxc/iobroker/config
-
-    progress "$(timestamp) [HOST] [ioBroker] Starting iobroker LXC container..."
-    lxc-start -n iobroker -d
-    if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
-
-    # wait to get ethernet connection up
-    sleep 5
-
-    progress "$(timestamp) [HOST] [ioBroker] Linking syslog to /var/log/iobroker..."
-    mkdir -p /var/log/iobroker
-    mount --bind /var/lib/lxc/iobroker/rootfs/var/log /var/log/iobroker/
-    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
-
-    info "\n$(timestamp) [GLOBAL] [iobroker] Host Installation done, beginning with LXC preparation.\n"
+    info "\n$(timestamp) [GLOBAL] [ioBroker] Host Installation done, beginning with LXC preparation.\n"
 
     progress "$(timestamp) [LXC] [ioBroker] Installing dependencies..."
-    lxc-attach -n iobroker -- /usr/bin/apt -y install wget git curl make gcc g++ &>> /var/log/yahm/iobroker_install.log
+    lxc-attach -n iobroker -- /usr/bin/apt -y install wget git curl make gcc g++ &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     # hack für lxc und avahi, falls bereits eine Instanz läuft
@@ -90,19 +35,19 @@ _addon_install()
     lxc-attach -n iobroker -- sed -i /etc/adduser.conf -e 's/FIRST_SYSTEM_GID=100/FIRST_SYSTEM_GID=400/g'
 
     progress "$(timestamp) [LXC] [ioBroker] Installing node.js repository"
-    curl -sL https://deb.nodesource.com/setup_8.x | lxc-attach -n iobroker -- bash -  &>> /var/lib/lxc/iobroker/config
+    curl -sL https://deb.nodesource.com/setup_8.x | lxc-attach -n iobroker -- bash -  &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [LXC] [ioBroker] Installing node.js"
-    lxc-attach -n iobroker -- /usr/bin/apt -y install nodejs &>> /var/log/yahm/iobroker_install.log
+    lxc-attach -n iobroker -- /usr/bin/apt -y install nodejs &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [LXC] [ioBroker] Downgrading npm to 4.x"
-    lxc-attach -n iobroker -- npm install -g npm@4 &>> /var/log/yahm/iobroker_install.log
+    lxc-attach -n iobroker -- npm install -g npm@4 &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else error "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [LXC] [ioBroker] Installing iobroker. This can take some time..."
-    lxc-attach -n iobroker --  npm install -g iobroker  --unsafe-perm &>> /var/log/yahm/iobroker_install.log
+    lxc-attach -n iobroker --  npm install -g iobroker  --unsafe-perm &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [HOST] [iobroker] Creating some useful scripts..."
@@ -129,27 +74,27 @@ EOF
     LXC_HOST_IP=$(get_ip_to_route ${IB_LXC_IP})
 
 #    progress "$(timestamp) [LXC] [ioBroker] Setup remote syslog..."
-#    echo "*.*  @@${LXC_HOST_IP}" | lxc-attach -n iobroker -- tee /etc/rsyslog.d/10-yahm.conf &>> /var/log/yahm/iobroker_install.log
+#    echo "*.*  @@${LXC_HOST_IP}" | lxc-attach -n iobroker -- tee /etc/rsyslog.d/10-yahm.conf &>> ${LOG_FILE}
 #    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
 
 #    progress "$(timestamp) [LXC] [ioBroker] Restarting syslog..."
-#    lxc-attach -n iobroker -- service rsyslog restart &>> /var/log/yahm/iobroker_install.log
+#    lxc-attach -n iobroker -- service rsyslog restart &>> ${LOG_FILE}
 #    if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [LXC] [ioBroker] Starting iobroker Service..."
-    lxc-attach -n iobroker -- systemctl start iobroker &>> /var/log/yahm/iobroker_install.log
+    lxc-attach -n iobroker -- systemctl start iobroker &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [LXC] [ioBroker] Installing hm-rpc adapter..."
-    lxc-attach -n iobroker -- iobroker add hm-rpc &>> /var/log/yahm/iobroker_install.log
+    lxc-attach -n iobroker -- iobroker add hm-rpc &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [LXC] [ioBroker] Setup CCU2 ip in hm-rpc..."
-    lxc-attach -n iobroker --  iobroker set hm-rpc.0 --homematicAdress ${YAHM_LXC_IP} &>> /var/log/yahm/iobroker_install.log
+    lxc-attach -n iobroker --  iobroker set hm-rpc.0 --homematicAdress ${YAHM_LXC_IP} &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
 
     progress "$(timestamp) [LXC] [ioBroker] Installing hm-rega adapter..."
-    lxc-attach -n iobroker -- iobroker add hm-rega &>> /var/log/yahm/iobroker_install.log
+    lxc-attach -n iobroker -- iobroker add hm-rega &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fail_inprogress; fi
 
     info "\n$(timestamp) [GLOBAL] [ioBroker] Successfully installed\n"
@@ -157,7 +102,7 @@ EOF
     info "$(timestamp) [GLOBAL] [ioBroker] Run yahm-iobroker to execute command or login"
 }
 
-_addon_update()
+_iobroker_update()
 {
     if [ $(lxc-info -n iobroker | grep RUNNING | wc -l) -eq 0 ]
     then
@@ -165,11 +110,11 @@ _addon_update()
     fi
 
     progress "$(timestamp) [LXC] [ioBroker] Updating ioBroker..."
-    lxc-attach -n iobroker --  npm update -g iobroker &>> /var/log/yahm/iobroker_update.log
+    lxc-attach -n iobroker --  npm update -g iobroker &>> ${LOG_FILE}
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fi
 }
 
-_addon_uninstall()
+_iobroker_uninstall()
 {
     info "Deleting installed iobroker container. To cancel this operation type CTRL+C you have 5 seconds..."
     countdown

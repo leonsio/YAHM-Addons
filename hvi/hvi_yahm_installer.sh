@@ -1,10 +1,6 @@
 #!/bin/bash
 
-description="Homematic-Virtual-Interface"
-addon_required="nodejs"
-module_required=""
-
-_addon_install()
+_hvi_install()
 {
 
     NODEJS_ROOT_FS="/var/lib/lxc/nodejs/rootfs"
@@ -86,7 +82,7 @@ _addon_install()
 
 }
 
-_addon_update()
+_hvi_update()
 {
 
     if [ $(lxc-info -n nodejs | grep RUNNING | wc -l) -eq 0 ]
@@ -99,7 +95,7 @@ _addon_update()
     if [ $? -eq 0 ]; then info "OK"; else die "FAILED"; fi
 }
 
-_addon_uninstall()
+_hvi_uninstall()
 {
 
     if [ $(lxc-info -n nodejs | grep RUNNING | wc -l) -eq 0 ]
